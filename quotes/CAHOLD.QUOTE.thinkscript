@@ -1,5 +1,30 @@
-# original ancient/obtuse/b0rk version from 2019: https://tos.mx/3Kykh6C
+#
+# This is a refactorted ThinkScript for identifying:
+#  - close above high of a low day (CAHOLD)
+#
+# original: https://tos.mx/3Kykh6C
+#  - refactor for readability
+#  - logic is still b0rk!
+#
 
-plot output = if (expAverage(close, 10) > expAverage(close,50))and (Low[1] <= Lowest(low, 3) and close > High[1] or low[2]<= lowest(low,3) and close > high[2]or Low[3] <= Lowest(low, 1) and close > High[1]) then 1 else 0;
- 
-assignBackgroundColor(if output == 1 then color.green else color.black);
+def upTrend = ExpAverage(close, 10) > ExpAverage(close, 50);
+
+def close_tday = close[0]; # today
+def low_yday = low[1]; # yesterday
+def low_2day = low[2]; # 2 days ago
+def low_3day = low[3]; # 3 days ago
+def high_yday = high[1];
+def high_2day = high[2];
+# def high_3day = high[3];
+
+def reversal = low_yday <= Lowest(low, 3) and close_tday > high_yday
+            or low_2day <= Lowest(low, 3) and close_tday > high_2day
+            or low_3day <= Lowest(low, 1) and close_tday > high_yday;
+
+plot output = if upTrend and reversal then 1 else 0;
+
+AssignBackgroundColor(
+    if output == 1
+    then Color.GREEN
+    else Color.BLACK
+);
