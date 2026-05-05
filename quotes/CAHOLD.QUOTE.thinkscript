@@ -1,0 +1,5 @@
+# original ancient/obtuse/b0rk version from 2019: https://tos.mx/3Kykh6C
+
+plot output = if (expAverage(close, 10) > expAverage(close,50))and (Low[1] <= Lowest(low, 3) and close > High[1] or low[2]<= lowest(low,3) and close > high[2]or Low[3] <= Lowest(low, 1) and close > High[1]) then 1 else 0;
+ 
+assignBackgroundColor(if output == 1 then color.green else color.black);
