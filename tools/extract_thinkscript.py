@@ -267,7 +267,7 @@ def extract_from_shortlink(url):
 
     # If we got HTML back, show what we found for debugging
     return (
-        f"Could not find tossc:// link in the page.\n"
+        f"Could not find tossc: link in the page.\n"
         f"Final URL: {final_url}\n"
         f"Page preview (first 1000 chars):\n{html[:1000]}"
     )
