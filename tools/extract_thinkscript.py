@@ -37,6 +37,10 @@ import requests
 # Base URL for tos.mx sharing site
 TOSMX_BASE = "https://tos.mx"
 
+# Sharing IDs are short alphanumeric strings (typically 7 chars).
+# Anything longer than this is likely encoded content, not an ID.
+MAX_SHARING_ID_LENGTH = 20
+
 # Known API endpoints to try for fetching shared content.
 # The thinkorswim sharing system stores content server-side; the tossc:
 # protocol link just contains a short ID that the desktop app uses to
@@ -234,7 +238,7 @@ def try_base64_decode(data):
     """Attempt base64 decoding with various padding fixes."""
     data_stripped = data.strip()
     # Skip very short strings (sharing IDs, not encoded content)
-    if len(data_stripped) < 20:
+    if len(data_stripped) < MAX_SHARING_ID_LENGTH:
         return None
 
     # Try standard base64
@@ -312,7 +316,7 @@ def extract_from_shortlink(url):
     # Handle bare sharing IDs (no URL scheme)
     if not url.startswith(("http://", "https://", "tossc:")):
         # Could be a bare sharing ID like "3Kykh6C"
-        if re.match(r'^[A-Za-z0-9_-]+$', url) and len(url) < 20:
+        if re.match(r'^[A-Za-z0-9_-]+$', url) and len(url) < MAX_SHARING_ID_LENGTH:
             sharing_id = url
             print(f"Using sharing ID directly: {sharing_id}", file=sys.stderr)
             return _fetch_and_return(sharing_id, content_type=None)
