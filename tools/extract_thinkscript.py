@@ -42,14 +42,15 @@ class TosPageParser(HTMLParser):
         self.tossc_links = []
 
     def handle_starttag(self, tag, attrs):
-        attrs_dict = dict(attrs)
-        href = attrs_dict.get("href", "")
-        if href.startswith("tossc://"):
-            self.tossc_links.append(href)
+        # Check all attributes for tossc:// links (href, data-href, onclick, etc.)
+        for _name, value in attrs:
+            if value and "tossc://" in value:
+                for match in re.finditer(r'tossc://[^\s"\'<>\\]+', value):
+                    self.tossc_links.append(match.group(0))
 
     def handle_data(self, data):
         # Some pages embed the tossc:// link in JavaScript or inline text
-        for match in re.finditer(r'tossc://[^\s"\'<>]+', data):
+        for match in re.finditer(r'tossc://[^\s"\'<>\\]+', data):
             self.tossc_links.append(match.group(0))
 
 
@@ -72,6 +73,23 @@ def extract_tossc_link(html):
     match = re.search(r'tossc://[^\s"\'<>\\]+', html)
     if match:
         return match.group(0)
+
+    # Try to find a tossc link constructed in JavaScript
+    # e.g., "tossc://" + encodedData or protocol + path patterns
+    match = re.search(
+        r'''["']tossc://["']\s*\+\s*["']([^"']+)["']''', html
+    )
+    if match:
+        return "tossc://" + match.group(1)
+
+    # Look for the link in a JavaScript variable assignment
+    # e.g., var link = "tossc://..."; or href = 'tossc://...'
+    match = re.search(
+        r'''(?:var|let|const|href|link|url)\s*=\s*["'](tossc://[^"']+)["']''',
+        html,
+    )
+    if match:
+        return match.group(1)
 
     return None
 
@@ -257,7 +275,7 @@ def extract_from_shortlink(url):
     return (
         f"Could not find tossc:// link in the page.\n"
         f"Final URL: {final_url}\n"
-        f"Page preview (first 500 chars):\n{html[:500]}"
+        f"Page preview (first 1000 chars):\n{html[:1000]}"
     )
 
 
