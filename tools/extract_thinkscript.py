@@ -3,11 +3,11 @@
 Extract thinkScript source code from a thinkorswim tos.mx shortlink.
 
 Usage:
-    python extract_thinkscript.py <tos.mx URL>
+    uv run extract_thinkscript.py <tos.mx URL>
 
 Example:
-    python extract_thinkscript.py http://tos.mx/!t9yVLssN
-    python extract_thinkscript.py https://tos.mx/ABC123
+    uv run extract_thinkscript.py http://tos.mx/!t9yVLssN
+    uv run extract_thinkscript.py https://tos.mx/ABC123
 
 How it works:
     1. Follows the tos.mx redirect to the thinkorswim sharing page.
@@ -25,16 +25,7 @@ import urllib.parse
 import zlib
 from html.parser import HTMLParser
 
-try:
-    import requests
-except ImportError:
-    requests = None
-
-try:
-    from urllib.request import urlopen, Request
-    from urllib.error import URLError, HTTPError
-except ImportError:
-    pass
+import requests
 
 
 class TosPageParser(HTMLParser):
@@ -58,16 +49,9 @@ class TosPageParser(HTMLParser):
 
 def fetch_url(url, follow_redirects=True):
     """Fetch a URL and return (final_url, response_body)."""
-    if requests:
-        resp = requests.get(url, allow_redirects=follow_redirects, timeout=30)
-        resp.raise_for_status()
-        return resp.url, resp.text
-
-    # Fallback to urllib
-    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    resp = urlopen(req, timeout=30)
-    body = resp.read().decode("utf-8", errors="replace")
-    return resp.url, body
+    resp = requests.get(url, allow_redirects=follow_redirects, timeout=30)
+    resp.raise_for_status()
+    return resp.url, resp.text
 
 
 def extract_tossc_link(html):

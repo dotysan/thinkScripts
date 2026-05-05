@@ -1,0 +1,11 @@
+[project]
+name = "thinkscripts-tools"
+version = "0.1.0"
+description = "Python tools for working with thinkorswim thinkScripts"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.28",
+]
+
+[project.scripts]
+extract-thinkscript = "extract_thinkscript:main"
