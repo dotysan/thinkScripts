@@ -1,13 +1,19 @@
-#!/usr/bin/env python3
+#! /usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "requests>=2.28",
+# ]
+# ///
 """
 Extract thinkScript source code from a thinkorswim tos.mx shortlink.
 
 Usage:
-    uv run extract_thinkscript.py <tos.mx URL>
+    ./extract_thinkscript.py <tos.mx URL>
 
 Example:
-    uv run extract_thinkscript.py http://tos.mx/!t9yVLssN
-    uv run extract_thinkscript.py https://tos.mx/ABC123
+    ./extract_thinkscript.py http://tos.mx/!t9yVLssN
+    ./extract_thinkscript.py https://tos.mx/ABC123
 
 How it works:
     1. Follows the tos.mx redirect to the thinkorswim sharing page.
