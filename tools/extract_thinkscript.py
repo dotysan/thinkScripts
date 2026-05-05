@@ -35,22 +35,25 @@ import requests
 
 
 class TosPageParser(HTMLParser):
-    """Parse the tos.mx/thinkorswim sharing page to find tossc:// links."""
+    """Parse the tos.mx/thinkorswim sharing page to find tossc: links."""
+
+    # Matches tossc: with or without // (e.g. "tossc:3Kykh6C" or "tossc://...")
+    TOSSC_RE = re.compile(r'tossc:/?/?[^\s"\'<>\\]+')
 
     def __init__(self):
         super().__init__()
         self.tossc_links = []
 
     def handle_starttag(self, tag, attrs):
-        # Check all attributes for tossc:// links (href, data-href, onclick, etc.)
+        # Check all attributes for tossc: links (href, data-href, onclick, etc.)
         for _name, value in attrs:
-            if value and "tossc://" in value:
-                for match in re.finditer(r'tossc://[^\s"\'<>\\]+', value):
+            if value and "tossc:" in value:
+                for match in self.TOSSC_RE.finditer(value):
                     self.tossc_links.append(match.group(0))
 
     def handle_data(self, data):
-        # Some pages embed the tossc:// link in JavaScript or inline text
-        for match in re.finditer(r'tossc://[^\s"\'<>\\]+', data):
+        # Some pages embed the tossc: link in JavaScript or inline text
+        for match in self.TOSSC_RE.finditer(data):
             self.tossc_links.append(match.group(0))
 
 
@@ -62,7 +65,7 @@ def fetch_url(url, follow_redirects=True):
 
 
 def extract_tossc_link(html):
-    """Extract tossc:// link from HTML page content."""
+    """Extract tossc: link from HTML page content."""
     parser = TosPageParser()
     parser.feed(html)
 
@@ -70,60 +73,49 @@ def extract_tossc_link(html):
         return parser.tossc_links[0]
 
     # Try regex as fallback for JavaScript-embedded links
-    match = re.search(r'tossc://[^\s"\'<>\\]+', html)
+    match = re.search(r'tossc:/?/?[^\s"\'<>\\]+', html)
     if match:
         return match.group(0)
-
-    # Try to find a tossc link constructed in JavaScript
-    # e.g., "tossc://" + encodedData or protocol + path patterns
-    match = re.search(
-        r'''["']tossc://["']\s*\+\s*["']([^"']+)["']''', html
-    )
-    if match:
-        return "tossc://" + match.group(1)
-
-    # Look for the link in a JavaScript variable assignment
-    # e.g., var link = "tossc://..."; or href = 'tossc://...'
-    match = re.search(
-        r'''(?:var|let|const|href|link|url)\s*=\s*["'](tossc://[^"']+)["']''',
-        html,
-    )
-    if match:
-        return match.group(1)
 
     return None
 
 
 def decode_thinkscript(tossc_url):
-    """Decode thinkScript source code from a tossc:// URL.
+    """Decode thinkScript source code from a tossc: URL.
 
-    The tossc:// URL typically contains encoded thinkScript data in
-    its path or query parameters. The encoding may be:
-    - URL-encoded
-    - Base64-encoded
-    - Base64 + zlib compressed
+    The tossc: URL contains an encoded ID or thinkScript data.
+    Formats seen in the wild:
+    - tossc:3Kykh6C  (just an ID after the colon)
+    - tossc://host/path?code=...
     """
-    # Parse the tossc:// URL
-    # Replace tossc:// with http:// so urllib can parse it
-    parseable = tossc_url.replace("tossc://", "http://", 1)
-    parsed = urllib.parse.urlparse(parseable)
-    params = urllib.parse.parse_qs(parsed.query)
+    # Normalize: strip the tossc: (and optional //) prefix to get the payload
+    payload = re.sub(r'^tossc:/?/?', '', tossc_url)
 
-    # Look for encoded content in common parameter names
-    code_params = ["code", "data", "script", "studies", "strategy", "content"]
-    encoded_data = None
+    if not payload:
+        return None
 
-    for param in code_params:
-        if param in params:
-            encoded_data = params[param][0]
-            break
+    # If it looks like a URL path with query params, parse it
+    if '?' in payload or '/' in payload:
+        parseable = "http://" + payload
+        parsed = urllib.parse.urlparse(parseable)
+        params = urllib.parse.parse_qs(parsed.query)
 
-    # If no known parameter, try the entire query string or path
-    if not encoded_data:
-        # Sometimes the data is in the path itself after the host portion
-        path_and_query = parsed.path + ("?" + parsed.query if parsed.query else "")
-        # Remove leading slash
-        encoded_data = path_and_query.lstrip("/")
+        # Look for encoded content in common parameter names
+        code_params = ["code", "data", "script", "studies", "strategy", "content"]
+        encoded_data = None
+
+        for param in code_params:
+            if param in params:
+                encoded_data = params[param][0]
+                break
+
+        # If no known parameter, try the entire query string or path
+        if not encoded_data:
+            path_and_query = parsed.path + ("?" + parsed.query if parsed.query else "")
+            encoded_data = path_and_query.lstrip("/")
+    else:
+        # Simple format: tossc:ENCODED_ID
+        encoded_data = payload
 
     if not encoded_data:
         return None
@@ -151,7 +143,9 @@ def decode_thinkscript(tossc_url):
     except (UnicodeDecodeError, AttributeError):
         pass
 
-    return None
+    # Base64 decoded to binary garbage — the original data is likely
+    # just a sharing ID (e.g. "3Kykh6C"), not encoded content
+    return encoded_data
 
 
 def try_base64_decode(data):
