@@ -4,7 +4,7 @@
 #
 # original: https://tos.mx/3Kykh6C
 #  - refactor for readability
-#  - logic is still b0rk!
+#  - fixed b0rk logic
 #
 
 def upTrend = ExpAverage(close, 10) > ExpAverage(close, 50);
@@ -15,11 +15,11 @@ def low_2day = low[2]; # 2 days ago
 def low_3day = low[3]; # 3 days ago
 def high_yday = high[1];
 def high_2day = high[2];
-# def high_3day = high[3];
+def high_3day = high[3];
 
 def reversal = low_yday <= Lowest(low, 3) and close_tday > high_yday
             or low_2day <= Lowest(low, 3) and close_tday > high_2day
-            or low_3day <= Lowest(low, 1) and close_tday > high_yday;
+            or low_3day <= Lowest(low, 3) and close_tday > high_3day;
 
 plot output = if upTrend and reversal then 1 else 0;
 
