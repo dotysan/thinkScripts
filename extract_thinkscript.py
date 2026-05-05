@@ -18,6 +18,7 @@ How it works:
 
 import argparse
 import base64
+import binascii
 import re
 import sys
 import urllib.parse
@@ -153,14 +154,14 @@ def try_base64_decode(data):
     for candidate in [data_stripped, data_stripped + "=", data_stripped + "=="]:
         try:
             return base64.b64decode(candidate)
-        except Exception:
+        except (ValueError, binascii.Error):
             pass
 
     # Try URL-safe base64
     for candidate in [data_stripped, data_stripped + "=", data_stripped + "=="]:
         try:
             return base64.urlsafe_b64decode(candidate)
-        except Exception:
+        except (ValueError, binascii.Error):
             pass
 
     return None
@@ -172,21 +173,21 @@ def try_decompress(data):
     try:
         decompressed = zlib.decompress(data, -zlib.MAX_WBITS)
         return decompressed.decode("utf-8")
-    except Exception:
+    except (zlib.error, UnicodeDecodeError):
         pass
 
     # Try zlib (with header)
     try:
         decompressed = zlib.decompress(data)
         return decompressed.decode("utf-8")
-    except Exception:
+    except (zlib.error, UnicodeDecodeError):
         pass
 
     # Try gzip
     try:
         decompressed = zlib.decompress(data, zlib.MAX_WBITS | 16)
         return decompressed.decode("utf-8")
-    except Exception:
+    except (zlib.error, UnicodeDecodeError):
         pass
 
     return None
