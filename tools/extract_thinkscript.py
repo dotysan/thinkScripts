@@ -19,7 +19,16 @@ How it works:
     1. Follows the tos.mx redirect to the thinkorswim sharing page.
     2. Extracts the tossc: sharing ID from the page HTML.
     3. Fetches the actual thinkScript source code from the thinkorswim
-       sharing API using the sharing ID.
+       sharing API (toslc.thinkorswim.com) using the sharing ID.
+
+Architecture (from decompiled thinkorswim 1991.3.x JARs):
+    The suit.jar launcher handles protocol registration and IPC:
+      - SharedConfigurationManager: file-based queue for sharing IDs
+      - Registers tossc: as a custom protocol (nptossc.dll on Windows)
+    The usergui.jar contains the actual download logic:
+      - LinkAddedListener calls popLinkAndName() to consume queued IDs
+      - Fetches content from toslc.thinkorswim.com/ax?sk={id}
+      - com.devexperts.tos.thinkscript package handles script parsing
 """
 
 import argparse
@@ -43,35 +52,48 @@ MAX_SHARING_ID_LENGTH = 20
 
 # Known API endpoints to try for fetching shared content.
 #
-# Architecture (from decompiled tos-suit-1991.3.0.jar):
-#   tossc: URL → PlatformProtocol.TOSSC.getURLValue(url)
-#     → SharedConfigurationManager.addLinkFromSharingCenter(sharingId)
-#   The desktop app registers tossc: as a custom protocol handler via
-#   nptossc.dll (Windows) dispatching through WindowsCommandHelper →
-#   WindowsSharedConfigurationLauncher → SharedConfigurationRunHelper.
-#   Server endpoint: toslc.thinkorswim.com (from SuitStartupManager).
+# Architecture (from decompiled thinkorswim JARs - suit & usergui 1991.3.x):
 #
-# The tossc: protocol link just contains a short ID that the desktop app
-# uses to retrieve the content. These endpoints are the known ways to
-# fetch it externally.
+#   Flow: tos.mx/{shortId} → HTML page with tossc:{sharingId} link
+#     → PlatformProtocol.TOSSC.getURLValue(url)
+#     → SharedConfigurationManager.addLinkFromSharingCenter(sharingId)
+#     → SharedConfigurationManager queues the ID (file-based IPC)
+#     → usergui module's LinkAddedListener calls popLinkAndName()
+#     → HTTP GET to toslc.thinkorswim.com to fetch content
+#
+#   Key classes (suit.jar - com.devexperts.jnlp.sharedconfig):
+#     - SharedConfigurationManager: file-based IPC queue for sharing IDs
+#     - SharedConfigurationManagerUtil: inter-process communication
+#     - SharedConfigurationWindowActivator: bridges IPC to UI module
+#     - SharedConfigurationRunHelper: launches the sharing flow
+#
+#   Key classes (usergui.jar - com.devexperts.tos.thinkscript):
+#     - Contains actual thinkScript parsing and the download consumer
+#     - The LinkAddedListener implementation lives here
+#
+#   Protocol registration:
+#     nptossc.dll (Windows) → WindowsCommandHelper →
+#     WindowsSharedConfigurationLauncher → SharedConfigurationRunHelper
+#
+#   Server: toslc.thinkorswim.com (from SuitStartupManager)
+#   Endpoint format: /ax?sk={sharingId} (sharing key parameter)
+#
+# The tossc: protocol link contains a short ID that the desktop app
+# uses to retrieve the content from the server.
 SHARING_API_ENDPOINTS = [
-    # toslc.thinkorswim.com - primary sharing server (from JAR decompilation)
+    # Primary: toslc.thinkorswim.com with /ax?sk= query parameter
+    # (confirmed from decompiled SuitStartupManager and web research)
+    "https://toslc.thinkorswim.com/ax?sk={sharing_id}",
+    # Alternative path-based patterns on toslc
+    "https://toslc.thinkorswim.com/shared/{sharing_id}",
+    "https://toslc.thinkorswim.com/center/shared/{sharing_id}",
     "https://toslc.thinkorswim.com/api/sharing/{sharing_id}",
-    "https://toslc.thinkorswim.com/api/shared/{sharing_id}",
-    "https://toslc.thinkorswim.com/api/content/{sharing_id}",
-    "https://toslc.thinkorswim.com/sharing/{sharing_id}",
-    # tos.mx API patterns
+    # tos.thinkorswim.com - alternate host
+    "https://tos.thinkorswim.com/client/download/shared/{sharing_id}",
+    "https://tos.thinkorswim.com/platform/client/tos.sc?fromSharing=true&sharedItem={sharing_id}",
+    # tos.mx direct API patterns
     "{base}/api/sharing/{sharing_id}",
-    "{base}/api/shared/{sharing_id}",
-    "{base}/api/content/{sharing_id}",
-    "{base}/sharing/{sharing_id}",
     "{base}/shared/{sharing_id}",
-    # trade.thinkorswim.com patterns
-    "https://trade.thinkorswim.com/sharing/study/{sharing_id}",
-    "https://trade.thinkorswim.com/sharing/watchlistcolumn/{sharing_id}",
-    "https://trade.thinkorswim.com/sharing/strategy/{sharing_id}",
-    "https://trade.thinkorswim.com/sharing/scan/{sharing_id}",
-    "https://trade.thinkorswim.com/api/sharing/{sharing_id}",
 ]
 
 
