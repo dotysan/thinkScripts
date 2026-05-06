@@ -29,8 +29,19 @@ Architecture (from decompiled thinkorswim 1991.3.x JARs):
     usergui.jar (com.devexperts.tos.ui.sharedconfiguration):
       - SharedConfigurationReciever.start(cd) → registers LinkAddedListener
       - checkLinksAvailable() → popLinkAndName() loop → processLink()
-      - processLink() handles SharedConfigType: SCRIPT_STUDY, SCRIPT_STRATEGY,
-        WORKSPACE, WATCHLIST, TREFIS, etc.
+      - processLink(cd, link, name, overwrite, scriptQuoteIndex):
+          SharedConfigLoader.getSharedConfigData(cd, link, listener)
+        The SharedConfigLoader class performs the actual HTTP fetch.
+      - SharedConfigDataListener.onResultReceived(SharedConfigData) handles
+        the response via showImportDialog() switch on SharedConfigType:
+          SCRIPT_STUDY, SCRIPT_STRATEGY → OnImportScriptIndicatorAction
+          SCRIPT_QUOTE → OnImportScriptQuoteAction
+          WORKSPACE → OnImportWorkspaceAction
+          WATCHLIST → OnImportWatchListAction
+          CHART, SIMPLE_CHART, FRED → chart tabs
+          FLEXIBLE_GRID, GRID_IN_* → grid layouts
+          ORDER, ORDER_TEMPLATE, ALERT_TEMPLATE, TREFIS, COLOR_SCHEME, etc.
+      - launchImportDialog() constructs: new URL("http://tos.mx/" + link)
       - Fetches content from toslc.thinkorswim.com/ax?sk={id}
     usergui.jar (com.devexperts.tos.thinkscript):
       - 6MB+ of thinkScript parsing and evaluation code
@@ -68,8 +79,15 @@ MAX_SHARING_ID_LENGTH = 20
 #     → usergui SharedConfigurationReciever.checkLinksAvailable(cd) fires
 #     → popLinkAndName() loop dequeues each LinkAndSharedName
 #     → processLink(cd, link, name, overwrite, scriptQuoteIndex)
-#       handles SharedConfigType: SCRIPT_STUDY, SCRIPT_STRATEGY, WORKSPACE,
-#       WATCHLIST, TREFIS, etc.
+#     → SharedConfigLoader.getSharedConfigData(cd, link, listener)
+#       ^^^ This is the actual HTTP fetcher class
+#     → SharedConfigDataListener.onResultReceived(SharedConfigData)
+#     → showImportDialog() switches on SharedConfigType:
+#         SCRIPT_STUDY, SCRIPT_STRATEGY → OnImportScriptIndicatorAction
+#         SCRIPT_QUOTE → OnImportScriptQuoteAction
+#         WORKSPACE → OnImportWorkspaceAction
+#         WATCHLIST → OnImportWatchListAction
+#         CHART, SIMPLE_CHART, FRED, FLEXIBLE_GRID, GRID_IN_*, etc.
 #
 #   Key classes (suit.jar - com.devexperts.jnlp.sharedconfig):
 #     - SharedConfigurationManager: file-based IPC queue for sharing IDs
@@ -80,6 +98,11 @@ MAX_SHARING_ID_LENGTH = 20
 #     - com.devexperts.tos.ui.sharedconfiguration.SharedConfigurationReciever:
 #       The actual consumer. start(cd) registers the LinkAddedListener.
 #       checkLinksAvailable() loops popLinkAndName() → processLink().
+#     - com.devexperts.tos.ui.sharedconfiguration.SharedConfigLoader:
+#       The HTTP fetcher. getSharedConfigData(cd, link, listener) makes
+#       the network call and returns SharedConfigData to the listener.
+#     - com.devexperts.tos.config.SharedConfigData: response data model
+#     - com.devexperts.tos.config.SharedConfigType: enum of content types
 #     - com.devexperts.tos.thinkscript: thinkScript parsing (6MB+ of code)
 #     - com.devexperts.tos.thinkscript.script: script evaluation
 #
@@ -89,16 +112,26 @@ MAX_SHARING_ID_LENGTH = 20
 #
 #   Server: toslc.thinkorswim.com (from SuitStartupManager)
 #   Endpoint format: /ax?sk={sharingId} (sharing key parameter)
+#   Alternate URL: http://tos.mx/{link} (used by launchImportDialog)
 #
-#   IMPORTANT: The "link" stored in LinkAndSharedName is the FULL sharing
-#   URL (e.g. "http://tos.mx/abc123" or the resolved tossc: content).
-#   processLink() is where the actual HTTP fetch/decode happens.
+#   Known toslc.thinkorswim.com URLs (from decompiled code):
+#     - /ax?sk={id}          - sharing content fetch
+#     - /api/loginBanner     - maintenance banner (SuitStartupManager)
+#     - /center              - learning center base URL
+#     - /center/howToTos/... - tutorials
+#     - /center/reference/glossary.html - glossary
 #
-# To find the exact HTTP call in the decompiled code, search for:
-#   rg -l 'processLink|SharedConfigType|SharedConfigurationReciever' \
-#     usergui/1991.3.0/com/devexperts/tos/ui/sharedconfiguration/
-#   rg 'toslc|HttpClient|openConnection' \
-#     usergui/1991.3.0/com/devexperts/tos/ui/sharedconfiguration/
+#   IMPORTANT: The "link" stored in LinkAndSharedName is the sharing ID
+#   (e.g. "3Kykh6C"). processLink() passes it to SharedConfigLoader
+#   which constructs the full URL and performs the HTTP fetch.
+#
+# To find the SharedConfigLoader implementation (next step):
+#   rg -l 'SharedConfigLoader' usergui/1991.3.0/com/devexperts/tos/
+#   rg -n 'getSharedConfigData|SharedConfigLoader' \
+#     usergui/1991.3.0/com/devexperts/tos/
+#   # Also check for the actual HTTP client usage:
+#   rg -n 'HttpClient|URLConnection|openConnection' \
+#     usergui/1991.3.0/com/devexperts/tos/config/
 #
 # The tossc: protocol link contains a short ID that the desktop app
 # uses to retrieve the content from the server.
