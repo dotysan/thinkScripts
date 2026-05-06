@@ -178,6 +178,10 @@ def _parse_api_response(resp):
     if not text:
         return None
 
+    # Skip HTML responses — they are web pages, not script content
+    if "text/html" in content_type or text.startswith(("<!DOCTYPE", "<html", "<HTML")):
+        return None
+
     # Try JSON response
     if "json" in content_type or text.startswith(("{", "[")):
         try:
@@ -299,22 +303,51 @@ def try_decompress(data):
 
 
 def looks_like_thinkscript(text):
-    """Heuristic check if text looks like thinkScript code."""
-    keywords = [
-        "declare",
-        "input",
-        "def ",
+    """Heuristic check if text looks like thinkScript code.
+
+    Must match multiple signals to avoid false positives on HTML pages
+    that happen to contain common English words like "close" or "open".
+    """
+    # Reject HTML pages outright
+    if re.search(r'<(!DOCTYPE|html|head|body)\b', text, re.IGNORECASE):
+        return False
+
+    # Reject very short text (less than a minimal script)
+    if len(text.strip()) < 10:
+        return False
+
+    # Strong indicators — unique to thinkScript syntax
+    strong_keywords = [
+        "declare ",
         "plot ",
-        "AddCloud",
-        "AddLabel",
-        "MovingAverage",
+        "AddCloud(",
+        "AddLabel(",
+        "AssignPriceColor(",
+        "AssignValueColor(",
+        "MovingAverage(",
+        "AverageType.",
+        "GetAggregationPeriod(",
+        "FundamentalType.",
+        "def ",
+        "rec ",
+    ]
+
+    # Weak indicators — common in thinkScript but also in English
+    weak_keywords = [
+        "input ",
         "close",
         "open",
         "high",
         "low",
         "volume",
     ]
-    return any(kw in text for kw in keywords)
+
+    strong_count = sum(1 for kw in strong_keywords if kw in text)
+    weak_count = sum(1 for kw in weak_keywords if kw in text)
+
+    # Need at least one strong indicator, or 3+ weak indicators together
+    # (3+ weak means it's very likely thinkScript, not incidental English)
+    return strong_count >= 1 or weak_count >= 3
 
 
 def extract_from_shortlink(url):
