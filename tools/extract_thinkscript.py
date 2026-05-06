@@ -22,13 +22,19 @@ How it works:
        sharing API (toslc.thinkorswim.com) using the sharing ID.
 
 Architecture (from decompiled thinkorswim 1991.3.x JARs):
-    The suit.jar launcher handles protocol registration and IPC:
-      - SharedConfigurationManager: file-based queue for sharing IDs
+    suit.jar (com.devexperts.jnlp.sharedconfig):
+      - SharedConfigurationManager: file-based IPC queue with LinkAndSharedName
       - Registers tossc: as a custom protocol (nptossc.dll on Windows)
-    The usergui.jar contains the actual download logic:
-      - LinkAddedListener calls popLinkAndName() to consume queued IDs
+      - addLink() logs: "Add link:{url} name:{n} overwrite:{ow}..."
+    usergui.jar (com.devexperts.tos.ui.sharedconfiguration):
+      - SharedConfigurationReciever.start(cd) → registers LinkAddedListener
+      - checkLinksAvailable() → popLinkAndName() loop → processLink()
+      - processLink() handles SharedConfigType: SCRIPT_STUDY, SCRIPT_STRATEGY,
+        WORKSPACE, WATCHLIST, TREFIS, etc.
       - Fetches content from toslc.thinkorswim.com/ax?sk={id}
-      - com.devexperts.tos.thinkscript package handles script parsing
+    usergui.jar (com.devexperts.tos.thinkscript):
+      - 6MB+ of thinkScript parsing and evaluation code
+      - com.devexperts.tos.thinkscript.script: script runner
 """
 
 import argparse
@@ -57,19 +63,25 @@ MAX_SHARING_ID_LENGTH = 20
 #   Flow: tos.mx/{shortId} → HTML page with tossc:{sharingId} link
 #     → PlatformProtocol.TOSSC.getURLValue(url)
 #     → SharedConfigurationManager.addLinkFromSharingCenter(sharingId)
-#     → SharedConfigurationManager queues the ID (file-based IPC)
-#     → usergui module's LinkAddedListener calls popLinkAndName()
-#     → HTTP GET to toslc.thinkorswim.com to fetch content
+#       logs: "Add link:{link} name:{name} overwrite:{ow} scriptQuoteIndex{i}"
+#     → SharedConfigurationManager queues LinkAndSharedName (file-based IPC)
+#     → usergui SharedConfigurationReciever.checkLinksAvailable(cd) fires
+#     → popLinkAndName() loop dequeues each LinkAndSharedName
+#     → processLink(cd, link, name, overwrite, scriptQuoteIndex)
+#       handles SharedConfigType: SCRIPT_STUDY, SCRIPT_STRATEGY, WORKSPACE,
+#       WATCHLIST, TREFIS, etc.
 #
 #   Key classes (suit.jar - com.devexperts.jnlp.sharedconfig):
 #     - SharedConfigurationManager: file-based IPC queue for sharing IDs
-#     - SharedConfigurationManagerUtil: inter-process communication
-#     - SharedConfigurationWindowActivator: bridges IPC to UI module
+#     - SharedConfigurationWindowActivator: implements LinkAddedListener
 #     - SharedConfigurationRunHelper: launches the sharing flow
 #
-#   Key classes (usergui.jar - com.devexperts.tos.thinkscript):
-#     - Contains actual thinkScript parsing and the download consumer
-#     - The LinkAddedListener implementation lives here
+#   Key classes (usergui.jar):
+#     - com.devexperts.tos.ui.sharedconfiguration.SharedConfigurationReciever:
+#       The actual consumer. start(cd) registers the LinkAddedListener.
+#       checkLinksAvailable() loops popLinkAndName() → processLink().
+#     - com.devexperts.tos.thinkscript: thinkScript parsing (6MB+ of code)
+#     - com.devexperts.tos.thinkscript.script: script evaluation
 #
 #   Protocol registration:
 #     nptossc.dll (Windows) → WindowsCommandHelper →
@@ -77,6 +89,16 @@ MAX_SHARING_ID_LENGTH = 20
 #
 #   Server: toslc.thinkorswim.com (from SuitStartupManager)
 #   Endpoint format: /ax?sk={sharingId} (sharing key parameter)
+#
+#   IMPORTANT: The "link" stored in LinkAndSharedName is the FULL sharing
+#   URL (e.g. "http://tos.mx/abc123" or the resolved tossc: content).
+#   processLink() is where the actual HTTP fetch/decode happens.
+#
+# To find the exact HTTP call in the decompiled code, search for:
+#   rg -l 'processLink|SharedConfigType|SharedConfigurationReciever' \
+#     usergui/1991.3.0/com/devexperts/tos/ui/sharedconfiguration/
+#   rg 'toslc|HttpClient|openConnection' \
+#     usergui/1991.3.0/com/devexperts/tos/ui/sharedconfiguration/
 #
 # The tossc: protocol link contains a short ID that the desktop app
 # uses to retrieve the content from the server.
