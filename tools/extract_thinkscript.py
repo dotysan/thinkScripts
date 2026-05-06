@@ -42,10 +42,24 @@ TOSMX_BASE = "https://tos.mx"
 MAX_SHARING_ID_LENGTH = 20
 
 # Known API endpoints to try for fetching shared content.
-# The thinkorswim sharing system stores content server-side; the tossc:
-# protocol link just contains a short ID that the desktop app uses to
-# retrieve the content. These endpoints are the known ways to fetch it.
+#
+# Architecture (from decompiled tos-suit-1991.3.0.jar):
+#   tossc: URL → PlatformProtocol.TOSSC.getURLValue(url)
+#     → SharedConfigurationManager.addLinkFromSharingCenter(sharingId)
+#   The desktop app registers tossc: as a custom protocol handler via
+#   nptossc.dll (Windows) dispatching through WindowsCommandHelper →
+#   WindowsSharedConfigurationLauncher → SharedConfigurationRunHelper.
+#   Server endpoint: toslc.thinkorswim.com (from SuitStartupManager).
+#
+# The tossc: protocol link just contains a short ID that the desktop app
+# uses to retrieve the content. These endpoints are the known ways to
+# fetch it externally.
 SHARING_API_ENDPOINTS = [
+    # toslc.thinkorswim.com - primary sharing server (from JAR decompilation)
+    "https://toslc.thinkorswim.com/api/sharing/{sharing_id}",
+    "https://toslc.thinkorswim.com/api/shared/{sharing_id}",
+    "https://toslc.thinkorswim.com/api/content/{sharing_id}",
+    "https://toslc.thinkorswim.com/sharing/{sharing_id}",
     # tos.mx API patterns
     "{base}/api/sharing/{sharing_id}",
     "{base}/api/shared/{sharing_id}",
