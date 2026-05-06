@@ -101,6 +101,15 @@ MAX_SHARING_ID_LENGTH = 20
 #     - com.devexperts.tos.ui.sharedconfiguration.SharedConfigLoader:
 #       The HTTP fetcher. getSharedConfigData(cd, link, listener) makes
 #       the network call and returns SharedConfigData to the listener.
+#       Internally creates Request with SharedConfigDescriptor.GET_SHARED_CONFIG_DATA.
+#     - com.devexperts.tos.invoker.beans.SharedConfigDescriptor:
+#       RPC bean descriptor. GET_SHARED_CONFIG_DATA maps to server method
+#       "getSharedConfigurationData"(String link). This is the actual RPC
+#       method name invoked on the server side.
+#     - com.devexperts.tos.ui.user.centrals.config.UserSharedConfigCentral:
+#       User-facing shared config central (also references SharedConfigDescriptor)
+#     - com.devexperts.tos.ui.user.centrals.config.AdminSharedConfigCentral:
+#       Admin shared config central
 #     - com.devexperts.tos.config.SharedConfigData: response data model
 #     - com.devexperts.tos.config.SharedConfigType: enum of content types
 #     - com.devexperts.tos.thinkscript: thinkScript parsing (6MB+ of code)
@@ -125,13 +134,21 @@ MAX_SHARING_ID_LENGTH = 20
 #   (e.g. "3Kykh6C"). processLink() passes it to SharedConfigLoader
 #   which constructs the full URL and performs the HTTP fetch.
 #
-# To find the SharedConfigLoader implementation (next step):
-#   rg -l 'SharedConfigLoader' usergui/1991.3.0/com/devexperts/tos/
-#   rg -n 'getSharedConfigData|SharedConfigLoader' \
+# RPC dispatch chain (fully traced):
+#   SharedConfigLoader.getSharedConfigData(cd, link, listener)
+#     → new Request(INSTANCE, cd, SharedConfigDescriptor.GET_SHARED_CONFIG_DATA, {link})
+#     → SharedConfigDescriptor.GET_SHARED_CONFIG_DATA
+#        = BeanMethod("getSharedConfigurationData", String.class)
+#     → server-side RPC call: getSharedConfigurationData(link)
+#     → response: SharedConfigData object
+#
+# To trace the RPC transport layer (next step):
+#   rg -n 'class Request|Request.*execute\|send' \
+#     usergui/1991.3.0/com/devexperts/tos/invoker/
+#   rg -n 'BeanMethod|BeanDescriptor' \
+#     usergui/1991.3.0/com/devexperts/tos/invoker/
+#   rg -n 'UserSharedConfigCentral|AdminSharedConfigCentral' \
 #     usergui/1991.3.0/com/devexperts/tos/
-#   # Also check for the actual HTTP client usage:
-#   rg -n 'HttpClient|URLConnection|openConnection' \
-#     usergui/1991.3.0/com/devexperts/tos/config/
 #
 # The tossc: protocol link contains a short ID that the desktop app
 # uses to retrieve the content from the server.
